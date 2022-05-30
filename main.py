@@ -15,6 +15,7 @@ def extract_job_from_result(soup):
     jobs = []
     for div in soup.find_all(name="ul", attrs={"class":"jobsearch-ResultsList"}):
         for td in div.find_all(name="td", attrs={"class": "resultContent"}):
+            print(td)
             job = dict()
 
             for a in td.find_all(name="a", attrs={"class":"jcs-JobTitle"}):
@@ -49,21 +50,25 @@ def insert_into_mongo(db, jobs, collection):
 if __name__ == '__main__':
 
     try:
-        client_indeed, db_indeed = connection_mongo(config['DB_USER'], config['DB_PWD'], 'indeed')
+        client_data, db_data = connection_mongo(config['DB_USER'], config['DB_PWD'], 'data')
+        client_web, db_web = connection_mongo(config['DB_USER'], config['DB_PWD'], 'web')
 
-        URL = "https://fr.indeed.com/jobs?q=Data&l=Caen%20(14)&fromage=14"
+        URL = "https://fr.indeed.com/jobs?q=Data&l=Caen%20(14)&fromage=1"
         page = requests.get(URL)
         soup = BeautifulSoup(page.text, "html.parser")
 
         jobs_data = extract_job_from_result(soup)
-        insert_into_mongo(db_indeed, jobs_data, "data")
+        insert_into_mongo(db_data, jobs_data, "jobs")
 
-        URL = "https://fr.indeed.com/jobs?q=Web&l=Caen%20(14)&fromage=14"
+        URL = "https://fr.indeed.com/jobs?q=Web&l=Caen%20(14)&fromage=1"
         page = requests.get(URL)
         soup = BeautifulSoup(page.text, "html.parser")
 
         jobs_web = extract_job_from_result(soup)
-        insert_into_mongo(db_indeed, jobs_web, "web")
+        insert_into_mongo(db_web, jobs_web, "jobs")
+
+        client_data.close()
+        client_web.close()
 
         logging.info("FIN ETL")
 
