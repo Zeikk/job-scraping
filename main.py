@@ -1,9 +1,9 @@
 from config import config
 from pymongo import MongoClient
-import logging, requests, datetime
+import logging, requests, datetime, sys
 from bs4 import BeautifulSoup
 
-logging.basicConfig(format='%(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logging.basicConfig(stream=sys.stdout, format='%(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
 
 def connection_mongo(user, pwd):
@@ -49,6 +49,7 @@ def insert_into_mongo(db, jobs, collection):
 if __name__ == '__main__':
 
     try:
+        logging.info("EXECUTION : {}".format(datetime.datetime.today()))
         client =  connection_mongo(config['DB_USER'], config['DB_PWD'])
 
         db_data = client['data']
