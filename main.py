@@ -6,16 +6,15 @@ from bs4 import BeautifulSoup
 logging.basicConfig(format='%(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
 
-def connection_mongo(user, pwd, db):
-    logging.info("Connection BDD : {}".format(db))
+def connection_mongo(user, pwd):
+    logging.info("Connection BDD")
     client = MongoClient("mongodb+srv://{}:{}@cluster0.3xvut.mongodb.net/?retryWrites=true&w=majority".format(user, pwd))
-    return client, client[db]
+    return client
 
 def extract_job_from_result(soup):
     jobs = []
     for div in soup.find_all(name="ul", attrs={"class":"jobsearch-ResultsList"}):
         for td in div.find_all(name="td", attrs={"class": "resultContent"}):
-            print(td)
             job = dict()
 
             for a in td.find_all(name="a", attrs={"class":"jcs-JobTitle"}):
@@ -50,8 +49,9 @@ def insert_into_mongo(db, jobs, collection):
 if __name__ == '__main__':
 
     try:
-        client_data, db_data = connection_mongo(config['DB_USER'], config['DB_PWD'], 'data')
-        client_web, db_web = connection_mongo(config['DB_USER'], config['DB_PWD'], 'web')
+        client =  connection_mongo(config['DB_USER'], config['DB_PWD'])
+
+        db_data = client['data']
 
         URL = "https://fr.indeed.com/jobs?q=Data&l=Caen%20(14)&fromage=1"
         page = requests.get(URL)
@@ -60,6 +60,8 @@ if __name__ == '__main__':
         jobs_data = extract_job_from_result(soup)
         insert_into_mongo(db_data, jobs_data, "jobs")
 
+        db_web = client['web']
+
         URL = "https://fr.indeed.com/jobs?q=Web&l=Caen%20(14)&fromage=1"
         page = requests.get(URL)
         soup = BeautifulSoup(page.text, "html.parser")
@@ -67,8 +69,7 @@ if __name__ == '__main__':
         jobs_web = extract_job_from_result(soup)
         insert_into_mongo(db_web, jobs_web, "jobs")
 
-        client_data.close()
-        client_web.close()
+        client.close()
 
         logging.info("FIN ETL")
 
