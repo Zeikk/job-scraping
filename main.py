@@ -1,17 +1,17 @@
-from config import config
+from config import config, urls
 from pymongo import MongoClient
 import logging, requests, datetime
 from bs4 import BeautifulSoup
 
 logging.basicConfig(format='%(name)s - %(levelname)s - %(message)s', level=logging.INFO)
-
+logger = logging.getLogger('ETL')
 
 def connection_mongo(user, pwd, db):
-    logging.info("Connection BDD : {}".format(db))
+    logger.info("Connection BDD : {}".format(db))
     client = MongoClient("mongodb+srv://{}:{}@cluster0.3xvut.mongodb.net/?retryWrites=true&w=majority".format(user, pwd))
     return client, client[db]
 
-def extract_job_from_result(soup):
+def extract_jobs_from_indeed(soup):
     jobs = []
     for div in soup.find_all(name="ul", attrs={"class":"jobsearch-ResultsList"}):
         for td in div.find_all(name="td", attrs={"class": "resultContent"}):
@@ -32,10 +32,35 @@ def extract_job_from_result(soup):
                     job['company'] = a[0].text.strip()
 
             job['date'] = datetime.datetime.today()
-
+            job['source'] = 'INDEED'
             jobs.append(job)
 
     return(jobs)
+
+def extract_jobs_from_linkedin(soup):
+    jobs = []
+    for ul in soup.find_all(name="ul", attrs={"class":"jobs-search__results-list"}):
+        for li in ul.find_all(name="li"):
+            job = dict()
+
+            for a in li.find_all(name="a", attrs={"class": "base-card__full-link"}):
+                job['href'] =  a['href']
+
+            for title in li.find_all(name="h3", attrs={"class": "base-search-card__title"}):
+                job['title'] = title.text.strip()
+
+            for a in li.find_all(name="a", attrs={"class": "hidden-nested-link"}):
+                job['company'] = a.text.strip()
+
+            for span in li.find_all(name="span", attrs={"class": "job-search-card__location"}):
+                job['location'] = span.text.strip()
+
+            job['date'] = datetime.datetime.today()
+            job['source'] = 'LINKEDIN'
+            job['_id'] = hash(job['href'])
+            jobs.append(job)
+
+    return jobs
 
 def insert_into_mongo(db, jobs, collection):
 
@@ -45,32 +70,38 @@ def insert_into_mongo(db, jobs, collection):
             res = db[collection].insert_one(job)
             nInserted += 1
 
-    logging.info("Rows inserted : {} ({})".format(nInserted, collection))
+    logger.info("Rows inserted : {} ({})".format(nInserted, collection))
 
 if __name__ == '__main__':
 
     try:
+        logger.info('START ETL')
         client_data, db_data = connection_mongo(config['DB_USER'], config['DB_PWD'], 'data')
         client_web, db_web = connection_mongo(config['DB_USER'], config['DB_PWD'], 'web')
 
-        URL = "https://fr.indeed.com/jobs?q=Data&l=Caen%20(14)&fromage=1"
-        page = requests.get(URL)
-        soup = BeautifulSoup(page.text, "html.parser")
+        for object in urls:
+            jobs = []
+            logger.info('Extraction {} pour les jobs du type {}'.format(object['source'], object['theme']))
 
-        jobs_data = extract_job_from_result(soup)
-        insert_into_mongo(db_data, jobs_data, "jobs")
+            page = requests.get(object['url'])
+            soup = BeautifulSoup(page.text, "html.parser")
 
-        URL = "https://fr.indeed.com/jobs?q=Web&l=Caen%20(14)&fromage=1"
-        page = requests.get(URL)
-        soup = BeautifulSoup(page.text, "html.parser")
+            # extraction des jobs
+            if object['source'] == "LINKEDIN":
+                jobs = extract_jobs_from_linkedin(soup)
+            elif object['source'] == "INDEED":
+                jobs = extract_jobs_from_indeed(soup)
 
-        jobs_web = extract_job_from_result(soup)
-        insert_into_mongo(db_web, jobs_web, "jobs")
+            # insertion dans la base
+            if object['theme'] == "WEB":
+                insert_into_mongo(db_web, jobs, "jobs")
+            elif object['theme'] == "DATA":
+                insert_into_mongo(db_data, jobs, "jobs")
 
         client_data.close()
         client_web.close()
 
-        logging.info("FIN ETL")
+        logger.info("FIN ETL")
 
     except Exception as err:
-        logging.error(err)
+        logger.error(err)
