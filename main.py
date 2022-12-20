@@ -1,6 +1,6 @@
 from config import config, urls
 from pymongo import MongoClient
-import logging, requests, datetime
+import logging, requests, datetime, sys
 from bs4 import BeautifulSoup
 
 logging.basicConfig(format='%(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -15,7 +15,6 @@ def extract_jobs_from_indeed(soup):
     jobs = []
     for div in soup.find_all(name="ul", attrs={"class":"jobsearch-ResultsList"}):
         for td in div.find_all(name="td", attrs={"class": "resultContent"}):
-            print(td)
             job = dict()
 
             for a in td.find_all(name="a", attrs={"class":"jcs-JobTitle"}):
@@ -57,7 +56,7 @@ def extract_jobs_from_linkedin(soup):
 
             job['date'] = datetime.datetime.today()
             job['source'] = 'LINKEDIN'
-            job['_id'] = hash(job['href'])
+            job['_id'] = hash(job['title'] + job['company'] + job['location']) # création d'un identifiant pour l'offre
             jobs.append(job)
 
     return jobs
@@ -76,12 +75,14 @@ if __name__ == '__main__':
 
     try:
         logger.info('START ETL')
+        logger.info("EXECUTION : {}".format(datetime.datetime.today()))
+
         client_data, db_data = connection_mongo(config['DB_USER'], config['DB_PWD'], 'data')
         client_web, db_web = connection_mongo(config['DB_USER'], config['DB_PWD'], 'web')
 
         for object in urls:
             jobs = []
-            logger.info('Extraction {} pour les jobs du type {}'.format(object['source'], object['theme']))
+            logger.info('Extraction {} for {} jobs'.format(object['source'], object['theme']))
 
             page = requests.get(object['url'])
             soup = BeautifulSoup(page.text, "html.parser")
